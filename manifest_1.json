@@ -1,0 +1,42 @@
+{
+  "code_version": "unknown",
+  "finished_at": "2026-10-24T18:36:18+00:00",
+  "http": {
+    "partitions_fetched": 0,
+    "partitions_reused": 18,
+    "requests": 0
+  },
+  "output_hashes": {
+    "aggregate_wide.csv": "db4784d5c8c3ceffd6a6a4ebdce28b957ecc8a443de253321cd41c3749f45754",
+    "cases.csv": "a1038f4968b8edb6d4518f78ef901fc2db7566297d814a635bc93fbdef09fd68",
+    "quality_report.json": "39090c1dfbfda4d2156790203a88f609042d71607f7d092350bd50960e242c2a",
+    "quarantine.csv": "44083295bcf50f8d45d3e1fd87b553aa67b6ec56e1ee26f7690f3a6eb5c8ebc6"
+  },
+  "peak_memory_mb": 320.1,
+  "population_join": {
+    "rows_after": 460662,
+    "rows_before": 460662
+  },
+  "records": {
+    "passed": 460662,
+    "quarantine_by_reason": {
+      "CLOSED_BEFORE_CREATED": 1151,
+      "DUPLICATE_CONTENT": 612,
+      "INVALID_ZIP": 6029,
+      "UNKNOWN_BOROUGH": 583
+    },
+    "quarantined_rows": 7775,
+    "raw": 468437
+  },
+  "sampling": {
+    "key_suffix_digits": [
+      "3"
+    ],
+    "sample_fraction": 0.1
+  },
+  "started_at": "2026-10-24T18:33:41+00:00",
+  "window": {
+    "end": "2023-07-01",
+    "start": "2022-01-01"
+  }
+}

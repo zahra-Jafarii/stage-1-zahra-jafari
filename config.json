@@ -1,0 +1,20 @@
+{
+  "api_url": "https://data.cityofnewyork.us/resource/erm2-nwe9.json",
+  "start_date": "2022-01-01",
+  "end_date": "2023-07-01",
+  "key_suffix_digits": ["3"],
+  "http_method": "GET",
+  "page_size": 50000,
+  "max_retries": 5,
+  "backoff_base_seconds": 1.0,
+  "timeout_seconds": 120,
+  "quarantine_threshold": 0.05,
+  "top_complaint_types": 15,
+  "raw_dir": "data/raw",
+  "curated_dir": "data/curated",
+  "population_file": "data/reference/population.csv",
+  "population_zip_column": "zip_code",
+  "population_value_column": "population",
+  "app_token_env": "SOCRATA_APP_TOKEN",
+  "track_memory": true
+}
