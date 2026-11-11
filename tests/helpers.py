@@ -1,5 +1,6 @@
 """Shared fixtures: config, fake HTTP objects, sample records."""
 from nyc311_factory.config import Config
+from nyc311_factory.datasets.nyc311 import SOURCE_COLUMNS, build_contract
 
 CONFIG_DEFAULTS = {
     "api_url": "https://example.invalid/data.json",
@@ -20,11 +21,22 @@ CONFIG_DEFAULTS = {
     "population_value_column": "population",
     "app_token_env": "TEST_TOKEN_NOT_SET",
     "track_memory": False,
+    "source_type": "api",
+    "dataset": "nyc311",
+    "population_source_url": "https://example.invalid/population.csv",
+    "population_source_retrieved": "2026-01-01",
 }
 
 
 def make_config(**overrides) -> Config:
     return Config(**{**CONFIG_DEFAULTS, **overrides})
+
+
+def make_contract(**config_overrides):
+    return build_contract(make_config(**config_overrides))
+
+
+SOURCE_NAMES = [column.name for column in SOURCE_COLUMNS]
 
 
 def good_record(**overrides) -> dict:

@@ -27,3 +27,8 @@ class SchemaDriftError(DataValidationError):
 
 class QuarantineThresholdError(DataValidationError):
     exit_code = 6
+
+
+class DestinationError(FactoryError):
+    """Writing to a destination (for example the database) failed."""
+    exit_code = 7

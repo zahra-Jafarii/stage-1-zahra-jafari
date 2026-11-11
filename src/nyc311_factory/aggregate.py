@@ -1,4 +1,4 @@
-"""Wide table: zip x complaint type, one column per month."""
+"""Wide table: borough x complaint type, one column per month."""
 import pandas as pd
 
 from .config import Config
@@ -12,26 +12,42 @@ def top_complaint_types(frame: pd.DataFrame, limit: int) -> list:
     return counts["complaint_type"].head(limit).tolist()
 
 
-def build_wide_table(cases_path, config: Config) -> pd.DataFrame:
-    columns = ["borough", "complaint_type", "year_month", "closing_hours", "population"]
-    frame = pd.read_csv(cases_path, usecols=columns, dtype={"borough": str})
-    frame = frame[frame["complaint_type"].isin(top_complaint_types(frame, config.top_complaint_types))]
+def modal_borough_by_zip(cases: pd.DataFrame) -> pd.Series:
+    # a zip code belongs to the borough it appears under most often
+    return cases.groupby("incident_zip")["borough"].agg(lambda values: values.mode().iloc[0])
 
-    grouped = frame.groupby(["borough", "complaint_type", "year_month"]).agg(
-        median_hours=("closing_hours", "median"),
-        complaints=("closing_hours", "size"),
-        population=("population", "first"),
-    )
-    safe_population = grouped["population"].where(grouped["population"] > 0)
+
+def borough_wide_table(cases: pd.DataFrame, sample_fraction: float, top_n: int) -> pd.DataFrame:
+    # borough x complaint type rows, one column per month
+    frame = cases.assign(borough=cases["incident_zip"].map(modal_borough_by_zip(cases)))
+    frame = frame[frame["complaint_type"].isin(top_complaint_types(frame, top_n))]
+    keys = ["borough", "complaint_type", "year_month"]
+
+    medians = frame.groupby(keys)["closing_hours"].median()
+
+    covered = frame[frame["population"].notna()]  # rates only count zips with a population
+    zip_population = covered.groupby("incident_zip").agg(
+        borough=("borough", "first"), population=("population", "first"))
+    borough_population = zip_population.groupby("borough")["population"].sum()
+    counts = covered.groupby(keys).size().rename("complaints").reset_index()
     # sample counts are scaled back to full-city estimates
-    grouped["rate_per_10k"] = grouped["complaints"] / config.sample_fraction / safe_population * RATE_BASE
+    counts["rate_per_10k"] = (
+        counts["complaints"] / sample_fraction
+        / counts["borough"].map(borough_population) * RATE_BASE
+    )
+    rates = counts.set_index(keys)["rate_per_10k"]
 
-    hours = grouped["median_hours"].unstack("year_month").sort_index(axis=1)
-    rates = grouped["rate_per_10k"].unstack("year_month").sort_index(axis=1)
-    hours.columns = [f"median_hours_{month}" for month in hours.columns]
-    rates.columns = [f"rate_per_10k_{month}" for month in rates.columns]
-
-    wide = pd.concat([hours, rates], axis=1).reset_index()
-    population_by_borough = frame.groupby("borough")["population"].first()
-    wide.insert(2, "population", wide["borough"].map(population_by_borough))
+    hours_wide = medians.unstack("year_month").sort_index(axis=1)
+    rates_wide = rates.unstack("year_month").sort_index(axis=1)
+    hours_wide.columns = [f"median_hours_{month}" for month in hours_wide.columns]
+    rates_wide.columns = [f"rate_per_10k_{month}" for month in rates_wide.columns]
+    wide = pd.concat([hours_wide, rates_wide], axis=1).reset_index()
+    wide.insert(2, "population", wide["borough"].map(borough_population))
     return wide.sort_values(["borough", "complaint_type"]).reset_index(drop=True)
+
+
+def build_wide_table(cases_path, config: Config) -> pd.DataFrame:
+    columns = ["borough", "incident_zip", "complaint_type", "year_month",
+               "closing_hours", "population"]
+    cases = pd.read_csv(cases_path, usecols=columns, dtype={"borough": str, "incident_zip": str})
+    return borough_wide_table(cases, config.sample_fraction, config.top_complaint_types)

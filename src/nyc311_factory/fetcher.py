@@ -6,10 +6,9 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from .config import Config, ensure_dir
-from .exceptions import InvalidResponseError
+from .exceptions import DataValidationError, InvalidResponseError
 from .files import sha256_file
 from .http_client import HttpClient
-from .schema import SOURCE_COLUMNS
 
 
 @dataclass(frozen=True)
@@ -34,17 +33,17 @@ def partition_path(raw_dir: str, partition: Partition) -> Path:
     return Path(raw_dir) / f"part_{partition.name}.jsonl"
 
 
-def filter_signature(config: Config) -> str:
-    # checkpoint is valid only for the same source and filter
-    payload = [config.api_url, list(config.key_suffix_digits), SOURCE_COLUMNS]
+def filter_signature(config: Config, columns: list) -> str:
+    # checkpoint is valid only for the same source, filter and column list
+    payload = [config.api_url, list(config.key_suffix_digits), list(columns)]
     return hashlib.sha256(json.dumps(payload).encode()).hexdigest()
 
 
 class Checkpoint:
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, columns: list):
         self.raw_dir = config.raw_dir
         self.path = Path(config.raw_dir) / "_checkpoint.json"
-        self.signature = filter_signature(config)
+        self.signature = filter_signature(config, columns)
         self.partitions = {}
         self._load()
     #  وضعیت های قبلی رو از روی دیسک میخونه.فایل checkpoint
@@ -83,7 +82,7 @@ class Checkpoint:
         self._save()
 
 
-def build_params(config: Config, partition: Partition, last_key) -> dict:
+def build_params(config: Config, partition: Partition, last_key, columns: list) -> dict:
     clauses = [
         f"created_date >= '{partition.start.isoformat()}T00:00:00'",
         f"created_date < '{partition.end.isoformat()}T00:00:00'",
@@ -94,7 +93,7 @@ def build_params(config: Config, partition: Partition, last_key) -> dict:
     if last_key:
         clauses.append(f"unique_key > '{last_key}'")
     return {
-        "$select": ",".join(SOURCE_COLUMNS),
+        "$select": ",".join(columns),
         "$where": " AND ".join(clauses),
         "$order": "unique_key",
         "$limit": config.page_size,
@@ -111,13 +110,13 @@ def check_page(page, last_key) -> None:
         raise InvalidResponseError("keyset did not advance")
 
 
-def fetch_partition(client: HttpClient, config: Config, partition: Partition) -> tuple:
+def fetch_partition(client: HttpClient, config: Config, partition: Partition, columns: list) -> tuple:
     final_path = partition_path(config.raw_dir, partition)
     tmp_path = final_path.with_name(final_path.name + ".tmp")
     last_key, rows = None, 0
     with open(tmp_path, "w", encoding="utf-8", newline="\n") as handle:
         while True:
-            page = client.request_json(config.api_url, build_params(config, partition, last_key))
+            page = client.request_json(config.api_url, build_params(config, partition, last_key, columns))
             check_page(page, last_key)
             for record in page:
                 handle.write(json.dumps(record, sort_keys=True) + "\n")
@@ -129,14 +128,25 @@ def fetch_partition(client: HttpClient, config: Config, partition: Partition) ->
     return rows, sha256_file(final_path)
 
 
-def fetch_all(client: HttpClient, config: Config, partitions: list, checkpoint: Checkpoint) -> dict:
+def fetch_all(client: HttpClient, config: Config, partitions: list,
+              checkpoint: Checkpoint, columns: list) -> dict:
     ensure_dir(config.raw_dir)
     summary = {"fetched": 0, "reused": 0}
     for partition in partitions:
         if checkpoint.is_complete(partition):
             summary["reused"] += 1
             continue
-        rows, sha256 = fetch_partition(client, config, partition)
+        rows, sha256 = fetch_partition(client, config, partition, columns)
         checkpoint.mark_done(partition, rows, sha256)
         summary["fetched"] += 1
     return summary
+
+
+def raw_paths(config: Config, partitions: list, checkpoint: Checkpoint) -> list:
+    # every partition must be fetched completely before processing starts
+    paths = []
+    for partition in partitions:
+        if not checkpoint.is_complete(partition):
+            raise DataValidationError(f"raw partition {partition.name} missing; run fetch first")
+        paths.append(partition_path(config.raw_dir, partition))
+    return paths

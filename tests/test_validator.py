@@ -1,21 +1,20 @@
 import unittest
-from datetime import datetime
 
-from nyc311_factory.exceptions import SchemaDriftError
-from nyc311_factory.schema import (
-    CLOSED_BEFORE_CREATED, CREATED_OUT_OF_WINDOW, INVALID_ZIP,
-    MISSING_AGENCY, MISSING_COMPLAINT_TYPE, REQUIRED_COLUMNS, UNKNOWN_BOROUGH,
+from nyc311_factory.datasets.nyc311 import (
+    CLOSED_BEFORE_CREATED, CREATED_OUT_OF_WINDOW, INVALID_ZIP, MISSING_AGENCY,
+    MISSING_COMPLAINT_TYPE, REQUIRED_COLUMNS, UNKNOWN_BOROUGH,
 )
+from nyc311_factory.exceptions import SchemaDriftError
 from nyc311_factory.validator import (
     check_batch_types, check_required_columns, split_valid, validate_record,
 )
-from tests.helpers import good_record
+from tests.helpers import good_record, make_contract
 
-WINDOW = (datetime(2024, 1, 1), datetime(2024, 3, 1))
+CONTRACT = make_contract(start_date="2024-01-01", end_date="2024-03-01")
 
 
 def reasons_for(**overrides):
-    return validate_record(good_record(**overrides), *WINDOW)
+    return validate_record(good_record(**overrides), CONTRACT)
 
 
 class ValidatorTest(unittest.TestCase):
@@ -45,21 +44,28 @@ class ValidatorTest(unittest.TestCase):
     def test_unspecified_borough_is_flagged(self):
         self.assertEqual(reasons_for(borough="Unspecified"), [UNKNOWN_BOROUGH])
 
+    def test_borough_case_and_spaces_are_accepted(self):
+        self.assertEqual(reasons_for(borough=" brooklyn "), [])
+
     def test_all_reasons_are_reported(self):
         reasons = reasons_for(agency="", complaint_type="", incident_zip="N/A")
         self.assertEqual(set(reasons), {MISSING_AGENCY, MISSING_COMPLAINT_TYPE, INVALID_ZIP})
 
+    def test_reasons_come_in_fixed_order(self):
+        reasons = reasons_for(agency="", complaint_type="", incident_zip="N/A")
+        self.assertEqual(reasons, sorted(reasons))
+
     def test_split_valid_separates_records(self):
         batch = [good_record(), good_record(unique_key="101", borough="Unspecified")]
-        valid, rejected = split_valid(batch, *WINDOW)
+        valid, rejected = split_valid(batch, CONTRACT)
         self.assertEqual(len(valid), 1)
         self.assertEqual(rejected[0][0]["unique_key"], "101")
 
     def test_missing_required_column_is_schema_drift(self):
         with self.assertRaises(SchemaDriftError):
-            check_required_columns({"unique_key"})
-        check_required_columns(set(REQUIRED_COLUMNS))  # must not raise
+            check_required_columns({"unique_key"}, CONTRACT)
+        check_required_columns(set(REQUIRED_COLUMNS), CONTRACT)  # must not raise
 
     def test_changed_column_type_is_schema_drift(self):
         with self.assertRaises(SchemaDriftError):
-            check_batch_types([{"unique_key": 5}])
+            check_batch_types([{"unique_key": 5}], CONTRACT)

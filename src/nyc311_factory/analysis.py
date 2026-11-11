@@ -5,11 +5,11 @@ from dataclasses import replace
 import numpy as np
 import pandas as pd
 
-from .aggregate import RATE_BASE, top_complaint_types
+from .aggregate import RATE_BASE, borough_wide_table, modal_borough_by_zip, top_complaint_types
 from .config import Config
 from .http_client import HttpClient
 from .pipeline import run_pipeline
-from .schema import DUPLICATE_CONTENT, DUPLICATE_KEY
+from .contract import DUPLICATE_CONTENT, DUPLICATE_KEY
 
 
 # ---------------------------------------------------------------
@@ -123,10 +123,6 @@ def zip_borough_conflicts(frame: pd.DataFrame) -> pd.DataFrame:
     conflicting = spread[spread > 1].index
     result = counts[counts["incident_zip"].isin(conflicting)]
     return result.sort_values(["incident_zip", "n"], ascending=[True, False])
-
-
-def modal_borough_by_zip(cases: pd.DataFrame) -> pd.Series:
-    return cases.groupby("incident_zip")["borough"].agg(lambda values: values.mode().iloc[0])
 
 
 def modal_borough_effect(cases: pd.DataFrame) -> dict:
@@ -293,30 +289,3 @@ def wide_part(wide: pd.DataFrame, prefix: str) -> pd.DataFrame:
     id_columns = [column for column in wide.columns if not column.startswith(WIDE_PREFIXES)]
     metric_columns = [column for column in wide.columns if column.startswith(prefix)]
     return wide[id_columns + metric_columns]
-
-
-def borough_wide_table(cases: pd.DataFrame, sample_fraction: float, top_n: int) -> pd.DataFrame:
-    # borough x complaint type rows, one column per month
-    frame = cases.assign(borough=cases["incident_zip"].map(modal_borough_by_zip(cases)))
-    frame = frame[frame["complaint_type"].isin(top_complaint_types(frame, top_n))]
-    keys = ["borough", "complaint_type", "year_month"]
-
-    medians = frame.groupby(keys)["closing_hours"].median()
-
-    covered = frame[frame["population"].notna()]
-    zip_population = covered.groupby("incident_zip").agg(
-        borough=("borough", "first"), population=("population", "first"))
-    borough_population = zip_population.groupby("borough")["population"].sum()
-    counts = covered.groupby(keys).size().rename("complaints").reset_index()
-    counts["rate_per_10k"] = (
-        counts["complaints"] / sample_fraction
-        / counts["borough"].map(borough_population) * RATE_BASE
-    )
-    rates = counts.set_index(keys)["rate_per_10k"]
-
-    hours_wide = medians.unstack("year_month").sort_index(axis=1)
-    rates_wide = rates.unstack("year_month").sort_index(axis=1)
-    hours_wide.columns = [f"median_hours_{month}" for month in hours_wide.columns]
-    rates_wide.columns = [f"rate_per_10k_{month}" for month in rates_wide.columns]
-    wide = pd.concat([hours_wide, rates_wide], axis=1).reset_index()
-    return wide.sort_values(["borough", "complaint_type"]).reset_index(drop=True)

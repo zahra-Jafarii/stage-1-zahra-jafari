@@ -24,7 +24,8 @@ class EndToEndTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         (self.root / "population.csv").write_text(
-            "zip,population\n10001,20000\n11201,50000\n", encoding="utf-8")
+            "zip,borough,population\n10001,MANHATTAN,20000\n11201,MANHATTAN,50000\n",
+            encoding="utf-8")
         self.page = [
             good_record(unique_key="1"),
             good_record(unique_key="2", incident_zip="11201", borough="BROOKLYN",
@@ -49,8 +50,20 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(manifest["records"]["passed"], 2)
         self.assertEqual(manifest["records"]["quarantine_by_reason"],
                          {"CLOSED_BEFORE_CREATED": 1, "DUPLICATE_KEY": 1})
-        self.assertEqual(manifest["population_join"],
+        self.assertEqual(manifest["joins"]["population"],
                          {"rows_before": 2, "rows_after": 2})
+
+    def test_borough_mismatch_is_reported_in_manifest(self):
+        # zip 11201 is MANHATTAN in the reference but BROOKLYN in the case
+        manifest = run_pipeline(self.build_config(), client=FakeClient([self.page]))
+        check = manifest["reference_checks"]["population"]
+        self.assertEqual((check["rows_comparable"], check["mismatch_rows"]), (2, 1))
+
+    def test_manifest_records_reference_source(self):
+        manifest = run_pipeline(self.build_config(), client=FakeClient([self.page]))
+        source = manifest["reference_sources"]["population"]
+        self.assertEqual(source["retrieved"], "2026-01-01")
+        self.assertTrue(source["url"].startswith("https://"))
 
     def test_second_run_gives_same_hashes_without_new_requests(self):
         config, client = self.build_config(), FakeClient([self.page])
@@ -64,6 +77,7 @@ class EndToEndTest(unittest.TestCase):
         with self.assertRaises(QuarantineThresholdError):
             run_pipeline(config, client=FakeClient([self.page]))
         self.assertFalse((self.root / "curated" / "cases.csv").exists())
+        self.assertTrue((self.root / "curated" / "quarantine.csv").exists())
 
     def test_dropped_column_stops_the_run(self):
         record = {k: v for k, v in good_record().items() if k != "agency"}

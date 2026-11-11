@@ -5,7 +5,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from .config import Config, load_config, with_window
+from .config import Config, load_config, with_overrides
 from .exceptions import ConfigError, FactoryError
 from .pipeline import run_pipeline
 
@@ -18,6 +18,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--end", help="override end_date (YYYY-MM-DD)")
     parser.add_argument("--since-last-run", action="store_true",
                         help="start from the end of the last manifest window")
+    parser.add_argument("--dataset", help="override dataset name")
+    parser.add_argument("--source-type", choices=["api", "csv", "jsonl"],
+                        help="override source_type")
+    parser.add_argument("--input", help="input file for csv / jsonl sources")
+    parser.add_argument("--destinations", help="comma separated: csv,database")
     return parser
 
 
@@ -31,12 +36,15 @@ def last_window_end(config: Config) -> str:
 
 
 def apply_overrides(config: Config, args) -> Config:
-    start = args.start or config.start_date
-    end = args.end or config.end_date
+    start, end = args.start, args.end
     if args.since_last_run:
         start = last_window_end(config)
         end = date.today().isoformat()
-    return with_window(config, start, end)
+    destinations = tuple(args.destinations.split(",")) if args.destinations else None
+    return with_overrides(
+        config, start_date=start, end_date=end, dataset=args.dataset,
+        source_type=args.source_type, input_path=args.input, destinations=destinations,
+    )
 
 
 def main(argv=None) -> int:
