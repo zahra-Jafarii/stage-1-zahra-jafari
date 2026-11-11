@@ -19,32 +19,34 @@ def git_version() -> str:
         return "unknown"
 
 
-def build_manifest(config: Config, stats, fetch_summary: dict, request_count: int,
-                   started_at: str, finished_at: str, peak_memory_mb, output_files: dict) -> dict:
+def package_version() -> str:
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+        return version("nyc311-factory")
+    except PackageNotFoundError:
+        return "unknown"
+
+
+def build_manifest(config: Config, stats, run) -> dict:
+    """`run` is a RunFacts object from the pipeline (source, joins, destinations, times)."""
     return {
-        "code_version": git_version(),
-        "started_at": started_at,
-        "finished_at": finished_at,
-        "window": {"start": config.start_date, "end": config.end_date},
-        "sampling": {
-            "key_suffix_digits": list(config.key_suffix_digits),
-            "sample_fraction": config.sample_fraction,
-        },
+        "code_version": git_version(),  # commit of the project that runs the factory
+        "package_version": package_version(),
+        "dataset": config.dataset,
+        "started_at": run.started_at,
+        "finished_at": run.finished_at,
+        "window": {"start": config.start_date, "end": config.end_date} if config.start_date else None,
+        "source": run.source,
+        "destinations": run.destinations,
         "records": {
             "raw": stats.raw_count,
             "passed": stats.passed_count,
             "quarantined_rows": stats.quarantine_rows,
             "quarantine_by_reason": dict(sorted(stats.reason_counts.items())),
         },
-        "population_join": {
-            "rows_before": stats.join_rows_before,
-            "rows_after": stats.join_rows_after,
-        },
-        "http": {
-            "requests": request_count,
-            "partitions_fetched": fetch_summary["fetched"],
-            "partitions_reused": fetch_summary["reused"],
-        },
-        "peak_memory_mb": peak_memory_mb,
-        "output_hashes": {name: sha256_file(path) for name, path in sorted(output_files.items())},
+        "joins": run.joins,
+        "reference_checks": run.reference_checks,
+        "reference_sources": run.reference_sources,
+        "peak_memory_mb": run.peak_memory_mb,
+        "output_hashes": {name: sha256_file(path) for name, path in sorted(run.output_files.items())},
     }
