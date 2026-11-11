@@ -4,17 +4,28 @@ import unittest
 
 import pandas as pd
 
+from nyc311_factory.contract import DUPLICATE_CONTENT, DUPLICATE_KEY
+from nyc311_factory.datasets.nyc311 import (
+    add_derived_columns, build_enrichers, load_population,
+)
 from nyc311_factory.exceptions import ConfigError, DataValidationError
 from nyc311_factory.parsing import clean_zip
-from nyc311_factory.schema import DUPLICATE_CONTENT, DUPLICATE_KEY
-from nyc311_factory.transformer import (
-    DuplicateTracker, attach_population, clean_batch, load_population, to_frame,
-)
-from tests.helpers import good_record, make_config
+from nyc311_factory.transformer import DuplicateTracker, clean_batch, to_frame
+from tests.helpers import SOURCE_NAMES, good_record, make_config, make_contract
+
+CONTRACT = make_contract()
+
+
+def frame_of(*records):
+    return to_frame(list(records), SOURCE_NAMES)
+
+
+def clean_frame(*records):
+    return add_derived_columns(clean_batch(frame_of(*records), CONTRACT))
 
 
 def clean_one(**overrides):
-    return clean_batch(to_frame([good_record(**overrides)])).iloc[0]
+    return clean_frame(good_record(**overrides)).iloc[0]
 
 
 class DerivedColumnsTest(unittest.TestCase):
@@ -44,27 +55,40 @@ class DerivedColumnsTest(unittest.TestCase):
         self.assertIsNone(clean_zip("00000"))
 
 
+class CleaningPolicyTest(unittest.TestCase):
+    def test_missing_descriptor_gets_unknown_label(self):
+        self.assertEqual(clean_one(descriptor=None)["descriptor"], "Unknown")
+        self.assertEqual(clean_one(descriptor="  ")["descriptor"], "Unknown")
+
+    def test_text_is_stripped_and_borough_upper_cased(self):
+        row = clean_one(agency=" NYPD ", borough=" brooklyn ")
+        self.assertEqual((row["agency"], row["borough"]), ("NYPD", "BROOKLYN"))
+
+    def test_bad_number_becomes_empty(self):
+        self.assertTrue(pd.isna(clean_one(latitude="abc")["latitude"]))
+
+
 class DuplicateTest(unittest.TestCase):
     def test_same_key_is_technical_duplicate(self):
-        kept, duplicates = DuplicateTracker().split(to_frame([good_record(), good_record()]))
+        kept, duplicates = DuplicateTracker(CONTRACT).split(frame_of(good_record(), good_record()))
         self.assertEqual(len(kept), 1)
         self.assertEqual(list(duplicates["reason_codes"]), [DUPLICATE_KEY])
 
     def test_same_content_other_key_is_content_duplicate(self):
-        frame = to_frame([good_record(), good_record(unique_key="101")])
-        kept, duplicates = DuplicateTracker().split(frame)
+        frame = frame_of(good_record(), good_record(unique_key="101"))
+        kept, duplicates = DuplicateTracker(CONTRACT).split(frame)
         self.assertEqual(len(kept), 1)
         self.assertEqual(list(duplicates["reason_codes"]), [DUPLICATE_CONTENT])
 
     def test_different_address_is_not_duplicate(self):
-        frame = to_frame([good_record(), good_record(unique_key="101", incident_address="2 OAK AVE")])
-        kept, duplicates = DuplicateTracker().split(frame)
+        frame = frame_of(good_record(), good_record(unique_key="101", incident_address="2 OAK AVE"))
+        kept, duplicates = DuplicateTracker(CONTRACT).split(frame)
         self.assertEqual((len(kept), len(duplicates)), (2, 0))
 
     def test_duplicates_are_found_across_batches(self):
-        tracker = DuplicateTracker()
-        tracker.split(to_frame([good_record()]))
-        _, duplicates = tracker.split(to_frame([good_record()]))
+        tracker = DuplicateTracker(CONTRACT)
+        tracker.split(frame_of(good_record()))
+        _, duplicates = tracker.split(frame_of(good_record()))
         self.assertEqual(len(duplicates), 1)
 
 
@@ -80,18 +104,26 @@ class PopulationJoinTest(unittest.TestCase):
         return make_config(population_file=path)
 
     def test_join_keeps_row_count_and_leaves_gaps_empty(self):
-        config = self.write_population("zip,population\n10001,20000\n")
-        frame = clean_batch(to_frame([good_record(), good_record(unique_key="101", incident_zip="11201")]))
-        joined = attach_population(frame, load_population(config))
+        config = self.write_population("zip,borough,population\n10001,MANHATTAN,20000\n")
+        frame = clean_frame(good_record(), good_record(unique_key="101", incident_zip="11201"))
+        joined = build_enrichers(config)[0].apply(frame)
         self.assertEqual(len(joined), 2)
         self.assertEqual(int(joined["population"].isna().sum()), 1)
 
     def test_repeated_zip_in_population_is_rejected(self):
-        config = self.write_population("zip,population\n10001,1\n10001,2\n")
+        config = self.write_population("zip,borough,population\n10001,MANHATTAN,1\n10001,MANHATTAN,2\n")
         with self.assertRaises(DataValidationError):
             load_population(config)
 
     def test_missing_population_column_is_config_error(self):
-        config = self.write_population("zip,people\n10001,1\n")
+        config = self.write_population("zip,borough,people\n10001,MANHATTAN,1\n")
         with self.assertRaises(ConfigError):
             load_population(config)
+
+    def test_borough_mismatch_is_counted(self):
+        config = self.write_population("zip,borough,population\n10001,BROOKLYN,20000\n")
+        join = build_enrichers(config)[0]
+        join.apply(clean_frame(good_record()))  # case says MANHATTAN, reference says BROOKLYN
+        report = join.consistency_report()
+        self.assertEqual(report["mismatch_rows"], 1)
+        self.assertEqual(report["top_mismatch_pairs"][0]["reference_value"], "BROOKLYN")
