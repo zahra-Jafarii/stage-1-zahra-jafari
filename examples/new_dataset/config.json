@@ -1,7 +1,0 @@
-{
-  "quarantine_threshold": 0.5,
-  "curated_dir": "out",
-  "source_type": "csv",
-  "input_path": "sample.csv",
-  "destinations": ["csv"]
-}
