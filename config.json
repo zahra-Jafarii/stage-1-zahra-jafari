@@ -2,7 +2,9 @@
   "api_url": "https://data.cityofnewyork.us/resource/erm2-nwe9.json",
   "start_date": "2022-01-01",
   "end_date": "2023-07-01",
-  "key_suffix_digits": ["3"],
+  "key_suffix_digits": [
+    "3"
+  ],
   "http_method": "GET",
   "page_size": 50000,
   "max_retries": 5,
@@ -16,5 +18,26 @@
   "population_zip_column": "zip_code",
   "population_value_column": "population",
   "app_token_env": "SOCRATA_APP_TOKEN",
-  "track_memory": true
+  "track_memory": true,
+  "population_raw_file": "data/reference/population_raw.csv",
+  "population_report_file": "data/reference/population_report.json",
+  "population_raw_zip_column": "label",
+  "population_raw_borough_column": "BOROUGH_GROUP",
+  "population_raw_value_column": "POP_DENOMINATOR",
+  "dataset": "nyc311",
+  "source_type": "api",
+  "input_path": "",
+  "destinations": [
+    "csv"
+  ],
+  "database_url_env": "DATABASE_URL",
+  "database_schema": "",
+  "database_cases_table": "cases",
+  "database_quarantine_table": "quarantine",
+  "population_borough_column": "borough",
+  "population_source_url": "https://raw.githubusercontent.com/nychealth/coronavirus-data/master/totals/data-by-modzcta.csv",
+  "population_source_retrieved": "2026-11-11",
+  "database_load_mode": "replace"
 }
+
+
