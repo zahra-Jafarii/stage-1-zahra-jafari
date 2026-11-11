@@ -8,6 +8,9 @@ version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = ["pandas", "requests"]
 
+[project.optional-dependencies]
+database = ["SQLAlchemy", "psycopg2-binary"]
+
 [project.scripts]
 nyc311-factory = "nyc311_factory.cli:main"
 

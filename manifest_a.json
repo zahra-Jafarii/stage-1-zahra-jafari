@@ -1,0 +1,103 @@
+{
+  "code_version": "4b219cd5e429211c1a957568c032f57269f5b39d",
+  "dataset": "nyc311",
+  "destinations": [
+    {
+      "file": "cases.csv",
+      "type": "csv"
+    },
+    {
+      "file": "quarantine.csv",
+      "type": "csv"
+    }
+  ],
+  "finished_at": "2026-11-11T14:21:56+00:00",
+  "joins": {
+    "population": {
+      "rows_after": 460662,
+      "rows_before": 460662
+    }
+  },
+  "output_hashes": {
+    "aggregate_wide.csv": "1c96c92982449460503955e52063b704ac5d7dcc667b3c9781e2fa8c02a77f0d",
+    "cases.csv": "361898cd6f4cbd321f435b0132f7c2fafa49ace82a3963d33dc2f6b20db47a32",
+    "quality_report.json": "baeedc473a5c8374a65710fe8a5c7172a39a7df22c75e67b17a002197e277697",
+    "quarantine.csv": "44083295bcf50f8d45d3e1fd87b553aa67b6ec56e1ee26f7690f3a6eb5c8ebc6"
+  },
+  "package_version": "0.1.0",
+  "peak_memory_mb": 342.5,
+  "records": {
+    "passed": 460662,
+    "quarantine_by_reason": {
+      "CLOSED_BEFORE_CREATED": 1151,
+      "DUPLICATE_CONTENT": 612,
+      "INVALID_ZIP": 6029,
+      "UNKNOWN_BOROUGH": 583
+    },
+    "quarantined_rows": 7775,
+    "raw": 468437
+  },
+  "reference_checks": {
+    "population": {
+      "mismatch_pct": 0.05,
+      "mismatch_rows": 230,
+      "rows_comparable": 459595,
+      "rows_key_unmatched": 1067,
+      "rows_total": 460662,
+      "top_mismatch_keys": {
+        "10030": 1,
+        "10463": 225,
+        "11208": 2,
+        "11385": 2
+      },
+      "top_mismatch_pairs": [
+        {
+          "case_value": "MANHATTAN",
+          "reference_value": "BRONX",
+          "rows": 225
+        },
+        {
+          "case_value": "BROOKLYN",
+          "reference_value": "QUEENS",
+          "rows": 2
+        },
+        {
+          "case_value": "QUEENS",
+          "reference_value": "BROOKLYN",
+          "rows": 2
+        },
+        {
+          "case_value": "QUEENS",
+          "reference_value": "MANHATTAN",
+          "rows": 1
+        }
+      ]
+    }
+  },
+  "reference_sources": {
+    "population": {
+      "file": "population.csv",
+      "retrieved": "2026-11-11",
+      "sha256": "829b1ee1e88914ef615a6d2508d2b9fe137c728721561e57f4a4c13981458e8b",
+      "url": "https://raw.githubusercontent.com/nychealth/coronavirus-data/master/totals/data-by-modzcta.csv"
+    }
+  },
+  "source": {
+    "partitions_fetched": 0,
+    "partitions_reused": 18,
+    "requests": 0,
+    "sampling": {
+      "key_suffix_digits": [
+        "3"
+      ],
+      "sample_fraction": 0.1
+    },
+    "type": "api",
+    "url": "https://data.cityofnewyork.us/resource/erm2-nwe9.json"
+  },
+  "started_at": "2026-11-11T14:19:07+00:00",
+  "window": {
+    "end": "2023-07-01",
+    "start": "2022-01-01"
+  }
+}
